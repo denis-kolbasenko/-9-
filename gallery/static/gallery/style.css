@@ -48,8 +48,48 @@ header {
   justify-content: center;
   color: #888;
   font-size: 3rem;
-    position: relative; /*  самостоятельное 9 лр */
-  overflow: hidden;   /*  самостоятельное 9 лр */
+  position: relative; /* Контейнер теперь должен быть relative, чтобы мы могли позиционировать загрузчик внутри */
+  overflow: hidden;   /* самостоятельное 9 лр */
+}
+
+/* Сам экран загрузки (поверх 3D) */
+.loader-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9); /* Полупрозрачный белый */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: opacity 0.3s; /* Плавное исчезновение */
+}
+
+/* Полоска прогресса (фон) */
+.progress-bar {
+  width: 60%;
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 10px;
+}
+
+/* Полоска прогресса (заполнение) */
+.progress-fill {
+  width: 0%; /* Будем менять это через JS */
+  height: 100%;
+  background-color: #007bff; /* Синий цвет */
+  transition: width 0.1s;
+}
+
+.error-msg {
+  color: #dc3545;
+  text-align: center;
+  padding: 20px;
 }
 
 .card-info {
