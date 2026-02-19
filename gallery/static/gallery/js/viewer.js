@@ -1,141 +1,117 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-// RoomEnvironment убран - ломает прозрачность
 
 export function loadModel(containerId, modelUrl) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  // 1. Сцена - Самостоятельное задание 9 лаба: Прозрачный фон
-  const scene = new THREE.Scene();
-  scene.background = null; // ✅ Прозрачный фон сцены
-
-  // 2. Камера
-  const camera = new THREE.PerspectiveCamera(
-    45,
-    container.clientWidth / container.clientHeight,
-    0.1,
-    100
-  );
-
-  // 3. Рендерер - Полные настройки цвета + прозрачность
-  const renderer = new THREE.WebGLRenderer({ 
-    antialias: true, 
-    alpha: true // ✅ Самостоятельное задание 9 лаба: Прозрачность canvas
-  });
-  renderer.setSize(container.clientWidth, container.clientHeight);
-  renderer.setPixelRatio(window.devicePixelRatio);
+  console.log('🚀=== LOADMODEL НАЧАЛО ===', containerId, modelUrl);
   
-  // ✅ ВАЖНЫЕ НАСТРОЙКИ ЦВЕТА (киношный рендер)
-  renderer.outputColorSpace = THREE.SRGBColorSpace;     // Правильные цвета
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;   // Tone Mapping как в Unreal
-  renderer.toneMappingExposure = 1.8;                   // Яркость
+  const container = document.getElementById(containerId);
+  if (!container) {
+    console.error('❌ КОНТЕЙНЕР НЕ НАЙДЕН');
+    return;
+  }
+  console.log('✅ Контейнер найден');
 
-  // Убедитесь, что очистка container.innerHTML = '' происходит ДО добавления лоадера
+  // ОЧИСТКА
   container.innerHTML = '';
+  console.log('✅ Контейнер очищен');
+
+  // ОСНОВНЫЕ ОБЪЕКТЫ
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 100);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.toneMapping = THREE.NoToneMapping;  // ✅ ОТКЛЮЧЕНО сжатие яркости
+  renderer.toneMappingExposure = 2.0;          // ✅ УСИЛЕНО на 200%
   container.appendChild(renderer.domElement);
+  console.log('✅ Renderer создан');
 
-  // 4. Контролы
-  const controls = new OrbitControls(camera, renderer.domElement);
+  // ✅ СТИЛИ ДЛЯ CANVAS
+  const canvas = renderer.domElement;
+  Object.assign(canvas.style, {
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    width: '100%',
+    height: '100%',
+    zIndex: '999999',
+    pointerEvents: 'all',
+    cursor: 'grab',
+    touchAction: 'manipulation'
+  });
+  console.log('✅ Canvas стили применены');
+
+  // ORBITCONTROLS
+  const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.minDistance = 0.5;
-  controls.maxDistance = 20;
+  controls.dampingFactor = 0.1;
+  controls.enableZoom = true;
+  controls.enablePan = false;
+  controls.enabled = true;
+  console.log('✅ Controls созданы');
 
-  // 5. СВЕТ (критично важно!)
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Мягкий свет
+  // 🔥 СУПЕР ЯРКИЙ СВЕТ (ЕДИНСТВЕННОЕ ИЗМЕНЕНИЕ)
+  const ambientLight = new THREE.AmbientLight(0xffffff, 2.5);        // Было 1.2 → 2.5
   scene.add(ambientLight);
-  const dirLight = new THREE.DirectionalLight(0xffffff, 1.5); // Основной свет
-  dirLight.position.set(5, 10, 7);
+  
+  const dirLight = new THREE.DirectionalLight(0xffffff, 5.0);        // Было 2.5 → 5.0
+  dirLight.position.set(5, 10, 5);                                   // Лучше позиция
   scene.add(dirLight);
+  
+  // Дополнительный свет для объема
+  const fillLight = new THREE.DirectionalLight(0xffffff, 2.0);       // ✅ НОВЫЙ свет
+  fillLight.position.set(-5, 5, -5);
+  scene.add(fillLight);
+  
+  console.log('✅ СУПЕР ЯРКИЙ свет добавлен');
 
-  // --- 1. Генерируем HTML лоадера программно --
+  // ЛОАДЕР
   const loaderDiv = document.createElement('div');
   loaderDiv.className = 'loader-overlay';
-  loaderDiv.innerHTML = `
-    <div>Загрузка...</div>
-    <div class="progress-bar">
-      <div class="progress-fill"></div>
-    </div>
-  `;
+  loaderDiv.innerHTML = '<div>Загрузка...</div>';
   container.appendChild(loaderDiv);
+  console.log('✅ Лоадер показан');
 
-  // Находим полоску, чтобы менять её ширину
-  const progressFill = loaderDiv.querySelector('.progress-fill');
-
-  // 6. Загрузка модели
+  // ✅ КРИТИЧНАЯ ЗАГРУЗКА МОДЕЛИ
   const loader = new GLTFLoader();
+  console.log('🔄 НАЧИНАЕМ ЗАГРУЗКУ:', modelUrl);
+  
   loader.load(
     modelUrl,
-    // A. ON LOAD (Успех)
     (gltf) => {
+      console.log('✅ МОДЕЛЬ ЗАГРУЖЕНА!', gltf);
       const model = gltf.scene;
-      fitCameraToObject(camera, model, controls);
       scene.add(model);
       
-      // Скрываем лоадер
-      loaderDiv.style.opacity = '0';
-      setTimeout(() => {
-        loaderDiv.remove(); // Удаляем из DOM через 0.3 сек
-      }, 300);
+      // ПОДГОНКА КАМЕРЫ
+      const box = new THREE.Box3().setFromObject(model);
+      const size = box.getSize(new THREE.Vector3()).length();
+      camera.position.set(size * 1.5, size * 1.5, size * 1.5);
+      camera.lookAt(0, 0, 0);
+      controls.target.set(0, 0, 0);
+      controls.update();
+      
+      loaderDiv.remove();
+      console.log('✅ Модель добавлена в сцену');
     },
-    // B. ON PROGRESS (Прогресс)
     (xhr) => {
-      // xhr.total - общий вес файла в байтах
-      // xhr.loaded - сколько скачалось
-      if (xhr.total > 0) {
-        const percent = (xhr.loaded / xhr.total) * 100;
-        progressFill.style.width = percent + '%';
-      }
+      console.log('📊 Прогресс:', xhr.loaded / xhr.total * 100 + '%');
     },
-    // C. ON ERROR (Ошибка)
     (error) => {
-      console.error('Ошибка загрузки:', error);
-      loaderDiv.innerHTML = `
-        <div class="error-msg">
-          ❌ Ошибка загрузки<br>
-          Проверьте файл
-        </div>
-      `;
+      console.error('❌ ОШИБКА ЗАГРУЗКИ МОДЕЛИ:', error);
+      loaderDiv.innerHTML = '❌ Ошибка загрузки модели';
     }
   );
 
-  // 7. Анимация
+  // АНИМАЦИЯ
   function animate() {
     requestAnimationFrame(animate);
-    controls.update(); // Обновляем контролы (инерция)
+    controls.update();
     renderer.render(scene, camera);
   }
   animate();
-
-  // 8. Resize обработчик
-  window.addEventListener('resize', () => {
-    camera.aspect = container.clientWidth / container.clientHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-  });
-}
-
-// Функция центровки камеры под модель
-function fitCameraToObject(camera, object, controls) {
-  const box = new THREE.Box3().setFromObject(object);
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z);
-
-  // Центрируем модель
-  object.position.x = -center.x;
-  object.position.y = -center.y;
-  object.position.z = -center.z;
-
-  // Позиционируем камеру
-  const fov = camera.fov * (Math.PI / 180);
-  let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5;
-  camera.position.set(cameraZ, cameraZ * 0.5, cameraZ);
-  camera.lookAt(0, 0, 0);
-
-  // Настраиваем контролы
-  controls.target.set(0, 0, 0);
-  controls.update();
+  console.log('✅ Анимация запущена');
+  
+  console.log('🚀=== LOADMODEL КОНЕЦ ===');
 }

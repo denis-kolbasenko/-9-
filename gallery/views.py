@@ -1,28 +1,66 @@
 import base64
 from django.core.files.base import ContentFile
-
-from django.shortcuts import render
-from .models import Asset
 from django.shortcuts import render, redirect
+from django.core.paginator import Paginator  # 1. Импорт для пагинации
+from django.db.models import Q  # Импортируем Q-object для сложного поиска
+from django.utils import timezone
+from datetime import timedelta
+from .models import Asset
 from .forms import AssetForm
-from django.contrib import messages
-
+from django.contrib import messages  # Импорт для сообщений
 
 def home(request):
-    # all() возвращает хаос.
-    # order_by('-created_at') сортирует по полю created_at.
-    # Минус (-) означает "по убыванию" (DESC).
-    assets = Asset.objects.all().order_by('-created_at')
+    # 1. Получаем параметры из URL (GET-запроса)
+    # Если параметра нет, вернет None (или пустую строку, если мы так настроили)
+    search_query = request.GET.get('q', '')
+    ordering = request.GET.get('ordering', 'new') # По умолчанию 'new'
+    days_filter = request.GET.get('days', '')  # Новый параметр для фильтра по дате
+    
+    # 2. Базовый запрос: Берем ВСЕ
+    assets = Asset.objects.all()
+    
+    # 3. Применяем фильтр по дате (если указан)
+    if days_filter and days_filter.isdigit():
+        days = int(days_filter)
+        cutoff_date = timezone.now() - timedelta(days=days)
+        assets = assets.filter(created_at__gte=cutoff_date)
+    
+    # 4. Применяем поиск (если пользователь что-то ввел)
+    if search_query:
+        # icontains = Case Insensitive Contains (содержит, без учета регистра)
+        # Если бы у нас было поле 'description', мы бы использовали Q:
+        # assets = assets.filter(Q(title__icontains=search_query) | Q(description__icontains=search_query))
+        assets = assets.filter(title__icontains=search_query)
+    
+    # 5. Применяем сортировку
+    if ordering == 'old':
+        assets = assets.order_by('created_at') # От старых к новым
+    elif ordering == 'name':
+        assets = assets.order_by('title')      # По алфавиту
+    else:
+        # По умолчанию (new) - свежие сверху
+        assets = assets.order_by('-created_at')
+    
+    # --- ПАГИНАЦИЯ (Новый код) ---
+    # Режем список по 8 штук на страницу (для теста, чтобы быстрее увидеть кнопки)
+    paginator = Paginator(assets, 6)
+    
+    # Получаем номер страницы из URL (например, ?page=2)
+    page_number = request.GET.get('page')
+    
+    # Получаем конкретный кусочек данных (объект Page)
+    page_obj = paginator.get_page(page_number)
+    
+    # 6. Отдаем результат
     context_data = {
         'page_title': 'Главная Галерея',
-        'assets': assets,
+        # 'assets': assets, <-- ЭТУ СТРОКУ УДАЛЕНО!
+        'page_obj': page_obj,  # <-- ВМЕСТО НЕЁ ЭТУ
     }
     return render(request, 'gallery/index.html', context_data)
 
-
 def about(request):
     return render(request, 'gallery/about.html')
-
 
 def upload(request):
     if request.method == 'POST':
@@ -53,7 +91,8 @@ def upload(request):
             # 3. Финальное сохранение в БД
             new_asset.save()
             
-            messages.success(request, 'Спасибо, файл загружен!')
+            # ДОБАВЛЯЕМ СООБЩЕНИЕ
+            messages.success(request, f'Модель "{new_asset.title}" успешно загружена!')
             return redirect('home')
     else:
         form = AssetForm()
